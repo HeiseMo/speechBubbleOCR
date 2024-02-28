@@ -14,6 +14,7 @@ font_path = 'T:\Projects\speechBubbleOCR\ComicNeue\ComicNeue-Regular.ttf'  # Spe
 
 # Load the YOLO model for speech bubble detection
 model = YOLO("comic-speech-bubble-detector.pt")
+text_segmentation = YOLO('comic-text-segmenter.pt')
 
 # Ensure directories exist
 os.makedirs(output_folder_path, exist_ok=True)
@@ -74,9 +75,14 @@ def process_images(input_folder, masked_folder, output_folder):
 
             # Translate the text to English
             translated_texts = [GoogleTranslator(source='auto', target='en').translate(text) for text in texts]
+            bubble_results = model.predict(image_path)
+            bubble_result = bubble_results[0]  # Assuming one image is processed
+
+            text_results = text_segmentation.predict(image_path)
+            text_result = text_results[0]  # Assuming one image is processed
 
             # Inpaint and overlay translated text
-            final_image = draw_green_boxes(image_path, result.boxes)
+            final_image =draw_green_boxes(image_path, text_result.boxes)
 
             # Save the final image
             final_image_path = os.path.join(output_folder, image_name)
