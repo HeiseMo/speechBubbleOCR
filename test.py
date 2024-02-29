@@ -14,6 +14,7 @@ font_path = 'T:\Projects\speechBubbleOCR\ComicNeue\ComicNeue-Regular.ttf'  # Spe
 
 # Load the YOLO model for speech bubble detection
 model = YOLO("comic-speech-bubble-detector.pt")
+model = model.to('cpu')  # Use CPU for inference
 text_segmentation = YOLO('comic-text-segmenter.pt')
 
 # Ensure directories exist
@@ -32,7 +33,12 @@ def draw_green_boxes(image_path, bboxes):
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
         
         # Draw a green rectangle around the text area
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)  # 2 is the thickness of the line
+        # cv2.rectangle(image, (x1, y1), (x2, y2), (255, 255, 255), 2)  # 2 is the thickness of the line
+        # Create a mask for the speech bubble area
+        mask = np.zeros_like(image)
+        cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
+        # Inpaint the image to white within the speech bubble area
+        image = cv2.inpaint(image, mask[:, :, 0], 3, cv2.INPAINT_TELEA)
 
     # Save or display the image
     cv2.imwrite('output_with_green_boxes.png', image)
@@ -45,19 +51,32 @@ def draw_green_boxes(image_path, bboxes):
 # Here, you would pass the actual bounding boxes and image path to the function
 
 
-def crop_and_ocr(image_path, bboxes):
-    """Crop the speech bubbles from the image based on bboxes and perform OCR."""
+def crop_and_ocr(image_path, bboxes, output_file):
+    """Crop the speech bubbles from the image based on bboxes, perform OCR, and save the text into a file."""
     image = cv2.imread(image_path)
     texts = []
-    for bbox in bboxes:
+    for i, bbox in enumerate(bboxes):
         # Coordinates from the bounding box
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
         # Crop the speech bubble area
         cropped_image = image[y1:y2, x1:x2]
+        # cv2.imshow('Cropped Image', cropped_image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
         # Perform OCR on the cropped area
         result = reader.readtext(cropped_image, detail=1)
         text = " ".join([text for (_, text, _) in result])
         texts.append(text)
+    
+        # Save the cropped image with a unique identifier
+        cropped_image_path = os.path.join(output_file, f"{os.path.splitext('crop')[0]}_{i}.png")
+        cv2.imwrite(cropped_image_path, cropped_image)
+    
+    # Save the texts into a file
+    raw_text_path = os.path.join(output_file, f"{os.path.splitext('2_img')[0]}_raw.txt")
+    with open(raw_text_path, 'w', encoding='utf-8') as file:
+        file.write('\n'.join(texts))
+    
     return texts
 
 def process_images(input_folder, masked_folder, output_folder):
@@ -71,7 +90,7 @@ def process_images(input_folder, masked_folder, output_folder):
             result = results[0]  # Assuming one image is processed
 
             # Crop and OCR speech bubbles
-            texts = crop_and_ocr(image_path, result.boxes)
+            texts = crop_and_ocr(image_path, result.boxes, output_folder)
 
             # Translate the text to English
             translated_texts = [GoogleTranslator(source='auto', target='en').translate(text) for text in texts]
