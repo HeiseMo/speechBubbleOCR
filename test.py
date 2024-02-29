@@ -78,7 +78,6 @@ def draw_translation(image_path, texts, text_bboxes):
         # Define text
         if i < len(texts):
             text = texts[i]
-            print(text)
             max_width = x2 - x1
             text = text_split_lines(text, max_width, font)
             bbox_text = draw.multiline_textbbox((x1, y1), text, font=font)
@@ -89,9 +88,7 @@ def draw_translation(image_path, texts, text_bboxes):
             y = y1 + (y2 - y1 - text_height) / 2
             # Draw text
             draw.multiline_text((x, y), text, fill='black', font=font)
-        else:
-            print(f"No text found for bounding box {i}, skipping this box.")
-    
+            
     filename = os.path.splitext(os.path.basename(image_path))[0].replace('_inpainted', '')
     final_image_path = os.path.join(os.path.abspath(output_folder_path), f"{filename}_final.png")
     image.save(final_image_path)
