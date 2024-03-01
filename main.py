@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import easyocr
 from deep_translator import GoogleTranslator
 from ultralytics import YOLO
@@ -26,6 +26,18 @@ os.makedirs(raw_output_folder_path, exist_ok=True)
 # Initialize the OCR reader for Korean
 reader = easyocr.Reader(['ko'])
 
+def convert_to_black_and_white(image_path):
+    img = Image.open(image_path)
+    # image = Image.open(image_path)
+    bw_image = img.convert('L')  # Converts the image to black and white
+    equalized_image = ImageOps.equalize(bw_image, mask=None)
+    equalized_image = ImageOps.autocontrast(equalized_image, cutoff=3, ignore=None, mask=None, preserve_tone=True)  # Perform histogram equalization
+    
+    equalized_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_equalized.png")
+    equalized_image.save(equalized_image_path)
+
+    return equalized_image_path
+
 def text_split_lines(text, max_width, font):
     words = text.split()
     lines = []
@@ -46,7 +58,6 @@ def text_split_lines(text, max_width, font):
             lines.append(' '.join(current_line))
             current_line = [word]
             current_length = word_width
-
     
     if current_line:
         lines.append(' '.join(current_line))
@@ -56,7 +67,6 @@ def text_split_lines(text, max_width, font):
     text = '\n'.join(lines)
 
     return text
-
 
 def draw_translation(image_path, texts, text_bboxes):
     image = Image.open(image_path)
@@ -103,7 +113,7 @@ def draw_inpaint(image_path, bboxes):
         # Create a mask for the speech bubble area
         mask = np.zeros_like(image)
         cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
-        # cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2) #change back to line up
+        # cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2) # line to draw green box
         # Inpaint the image to white within the speech bubble area
         image = cv2.inpaint(image, mask[:, :, 0], 3, cv2.INPAINT_TELEA)
 
@@ -118,26 +128,31 @@ def crop_and_ocr(image_path, bboxes):
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
         # Crop the speech bubble area
         cropped_image = image[y1:y2, x1:x2]
+        # Perform text recognition
         text_results = text_segmentation.predict(cropped_image)
         text_result = text_results[0]
+        
         # Perform OCR on the cropped area
         x1, y1, x2, y2 = [int(coord) for coord in text_result.boxes[0].xyxy[0].tolist()]
 
         # Padding for box coords
-        x1 -= 8
-        y1 -= 8
-        x2 += 8
+        x1 -= 35
+        y1 -= 25
+        x2 += 55
         y2 += 8
 
-        cropped_text_img = cropped_image[y1:y2, x1:x2]
-        result = reader.readtext(cropped_text_img, detail=1)
+         # Save the cropped image with a unique identifier
+        cropped_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_{i}.png")
+        cv2.imwrite(cropped_image_path, cropped_image)
+
+        bwImage = convert_to_black_and_white(cropped_image_path)
+        bwImage = cv2.imread(bwImage)
+        cropped_text_image = bwImage[y1:y2, x1:x2]
+        
+        result = reader.readtext(cropped_text_image, detail=1)
         text = " ".join([text for (_, text, _) in result])
         texts.append(text)
-    
-        # Save the cropped image with a unique identifier
-        cropped_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_{i}.png")
-        cv2.imwrite(cropped_image_path, cropped_text_img)
-    
+
     # Save the texts into a file
     raw_text_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_raw.txt")
     with open(raw_text_path, 'w', encoding='utf-8') as file:
