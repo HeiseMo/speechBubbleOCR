@@ -129,7 +129,6 @@ def crop_and_ocr(image_path, bboxes):
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
         # Crop the speech bubble area
         cropped_image = image[y1:y2, x1:x2]
-        cropped_image = cv2.bitwise_not(cropped_image)
         # Perform text recognition
         text_results = text_segmentation.predict(cropped_image)
         text_result = text_results[0]
