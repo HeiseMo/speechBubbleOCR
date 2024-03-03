@@ -5,10 +5,11 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 import easyocr
 from deep_translator import GoogleTranslator
 from ultralytics import YOLO
+from CAE import extract_comic_archive, create_cbz_from_directory
 
 # Global Variables
 # Directories setup
-input_folder_path = 'rawImg'
+input_folder_path = 'rawImg\\Chapter'
 masked_folder_path = 'masked'  # For inpainted images
 output_folder_path = 'output'  # For final images with translated text
 raw_output_folder_path = 'rawOutput'
