@@ -28,7 +28,7 @@ def download_images(image_urls, folder_name='downloaded_images'):
             print(f"Error downloading image {i + 1}: {e}")
 
 if __name__ == '__main__':
-    target_url = ''  # Replace with the actual website URL
+    target_url = 'https://newtoki.vip/webtoon/1094/673939'  # Replace with the actual website URL
     image_urls = fetch_image_urls(target_url)
     download_images(image_urls)
 
