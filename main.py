@@ -120,6 +120,7 @@ def draw_inpaint(image_path, bboxes):
     return image
 
 def crop_and_ocr(image_path, bboxes):
+    
     """Crop the speech bubbles from the image based on bboxes, perform OCR, and save the text into a file."""
     image = cv2.imread(image_path)
     texts = []
@@ -128,26 +129,34 @@ def crop_and_ocr(image_path, bboxes):
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
         # Crop the speech bubble area
         cropped_image = image[y1:y2, x1:x2]
+        cropped_image = cv2.bitwise_not(cropped_image)
         # Perform text recognition
         text_results = text_segmentation.predict(cropped_image)
         text_result = text_results[0]
-        
+                    
         # Perform OCR on the cropped area
-        x1, y1, x2, y2 = [int(coord) for coord in text_result.boxes[0].xyxy[0].tolist()]
+        if(text_result.boxes.data.tolist()):
+            x1, y1, x2, y2 = [int(coord) for coord in text_result.boxes[0].xyxy[0].tolist()]
 
         # Padding for box coords
-        x1 -= 35
-        y1 -= 25
-        x2 += 55
+        x1 -= 45
+        y1 -= 55
+        x2 += 57
         y2 += 8
 
+        # Hard Fix, need to come back and refine
+        if(y1<0):
+            y1=0
+
+        cropped_bubble_text_crop = cropped_image[y1:y2, x1:x2] # delete line (only here to see exact area being put into OCR)
          # Save the cropped image with a unique identifier
         cropped_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_{i}.png")
-        cv2.imwrite(cropped_image_path, cropped_image)
+        cv2.imwrite(cropped_image_path, cropped_bubble_text_crop) # cropped_image cropped_bubble_text_crop
 
-        bwImage = convert_to_black_and_white(cropped_image_path)
-        bwImage = cv2.imread(bwImage)
-        cropped_text_image = bwImage[y1:y2, x1:x2]
+        # bwImage = convert_to_black_and_white(cropped_image_path)
+        # bwImage = cv2.imread(bwImage)
+        cropped_text_image = cropped_image[y1:y2, x1:x2] # bwImage
+        print(cropped_text_image.shape)
         
         result = reader.readtext(cropped_text_image, detail=1)
         text = " ".join([text for (_, text, _) in result])
