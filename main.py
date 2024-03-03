@@ -5,11 +5,11 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 import easyocr
 from deep_translator import GoogleTranslator
 from ultralytics import YOLO
-from CAE import extract_comic_archive, create_cbz_from_directory
+# from CAE import extract_comic_archive, create_cbz_from_directory
 
 # Global Variables
 # Directories setup
-input_folder_path = 'rawImg\\Chapter'
+input_folder_path = 'rawImg'
 masked_folder_path = 'masked'  # For inpainted images
 output_folder_path = 'output'  # For final images with translated text
 raw_output_folder_path = 'rawOutput'
@@ -26,6 +26,20 @@ os.makedirs(raw_output_folder_path, exist_ok=True)
 
 # Initialize the OCR reader for Korean
 reader = easyocr.Reader(['ko'])
+
+def is_black_image(img):
+    # img = Image.open(image_path)
+    img_array = np.asarray(img)
+    height, width = img_array.shape[:2]
+    threshold = height * width / 2
+    count = 0
+    for row in img_array:
+        for pixel in row:
+            if sum(pixel) < 128:
+                count += 1
+            if count > threshold:
+                return True
+    return False
 
 def convert_to_black_and_white(image_path):
     img = Image.open(image_path)
@@ -79,14 +93,22 @@ def draw_translation(image_path, texts, text_bboxes):
     # Adjust the size as needed
     font_size = 42  
     font = ImageFont.truetype(font_path, font_size)
-
+    font_color = 'black'
+    
     # Sort boxes based on the y-coord of the top-left corner
     text_bboxes = sorted(text_bboxes, key=lambda bbox: bbox.xyxy[0][1])
 
     for i, bbox in enumerate(text_bboxes):
         # Convert bbox coordinates to integer
         x1, y1, x2, y2 = [int(coord) for coord in bbox.xyxy[0].tolist()]
+
+        speech_box = image.crop((x1, y1, x2, y2))
         # Define text
+        if is_black_image(speech_box):
+            font_color = 'white'
+        else:
+            font_color = 'black'
+        
         if i < len(texts):
             text = texts[i]
             max_width = x2 - x1
@@ -98,7 +120,7 @@ def draw_translation(image_path, texts, text_bboxes):
             x = x1 + (x2 - x1 - text_width) / 2
             y = y1 + (y2 - y1 - text_height) / 2
             # Draw text
-            draw.multiline_text((x, y), text, fill='black', font=font)
+            draw.multiline_text((x, y), text, fill=font_color, font=font)
             
     filename = os.path.splitext(os.path.basename(image_path))[0].replace('_inpainted', '')
     final_image_path = os.path.join(os.path.abspath(output_folder_path), f"{filename}_final.png")
@@ -121,7 +143,7 @@ def draw_inpaint(image_path, bboxes):
     return image
 
 def crop_and_ocr(image_path, bboxes):
-    
+    bboxes = sorted(bboxes, key=lambda bbox: bbox.xyxy[0][1])
     """Crop the speech bubbles from the image based on bboxes, perform OCR, and save the text into a file."""
     image = cv2.imread(image_path)
     texts = []
@@ -136,31 +158,43 @@ def crop_and_ocr(image_path, bboxes):
                     
         # Perform OCR on the cropped area
         if(text_result.boxes.data.tolist()):
+            print(f"found text in {i}")
             x1, y1, x2, y2 = [int(coord) for coord in text_result.boxes[0].xyxy[0].tolist()]
 
-        # Padding for box coords
-        x1 -= 45
-        y1 -= 55
-        x2 += 57
-        y2 += 8
+             # # Padding for box coords
+            x1 -= 45
+            y1 -= 55
+            x2 += 57
+            y2 += 8
+            print(f"x1: {x1}, y1: {y1}, x2: {x2}, y2: {y2}")
 
-        # Hard Fix, need to come back and refine
-        if(y1<0):
-            y1=0
+            
 
-        cropped_bubble_text_crop = cropped_image[y1:y2, x1:x2] # delete line (only here to see exact area being put into OCR)
-         # Save the cropped image with a unique identifier
-        cropped_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_{i}.png")
-        cv2.imwrite(cropped_image_path, cropped_bubble_text_crop) # cropped_image cropped_bubble_text_crop
+            # Hard Fix, need to come back and refine
+            if(y1<0):
+                y1=1
+            
+            if(x1<0):
+                x1=0
 
-        # bwImage = convert_to_black_and_white(cropped_image_path)
-        # bwImage = cv2.imread(bwImage)
-        cropped_text_image = cropped_image[y1:y2, x1:x2] # bwImage
-        print(cropped_text_image.shape)
-        
-        result = reader.readtext(cropped_text_image, detail=1)
-        text = " ".join([text for (_, text, _) in result])
-        texts.append(text)
+            print(f"After if statements: x1: {x1}, y1: {y1}, x2: {x2}, y2: {y2}")
+            cropped_bubble_text_crop = cropped_image[y1:y2, x1:x2] # delete line (only here to see exact area being put into OCR)
+            # Save the cropped image with a unique identifier
+            cropped_image_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_{i}.png")
+            cv2.imwrite(cropped_image_path, cropped_bubble_text_crop) # cropped_image cropped_bubble_text_crop
+
+            # bwImage = convert_to_black_and_white(cropped_image_path)
+            # bwImage = cv2.imread(bwImage)
+            cropped_text_image = cropped_image[y1:y2, x1:x2] # bwImage
+            print(cropped_text_image.shape)
+            
+            result = reader.readtext(cropped_text_image, detail=1)
+            text = " ".join([text for (_, text, _) in result])
+            texts.append(text)
+        else:
+            print(f"didnt find text in {i}")
+
+       
 
     # Save the texts into a file
     raw_text_path = os.path.join(raw_output_folder_path, f"{os.path.splitext(os.path.basename(image_path))[0]}_raw.txt")
